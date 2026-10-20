@@ -1,0 +1,23 @@
+# 编译产物（体积大且可由 colcon build 重建）
+/build/
+/install/
+/log/
+
+# 日志与缓存
+*.log
+__pycache__/
+*.pyc
+*.pyo
+
+# 旧地图草稿与图片数据集（二进制大文件，不适合版本跟踪）
+/src/racecar/maps/
+/src/racecar/scripts/dataset/
+/src/racecar/scripts/video/
+
+# 红绿灯模型权重(28M)与视频
+/RedandGreen/
+*.mp4
+*.onnx
+
+# 杂项
+.DS_Store

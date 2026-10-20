@@ -1,0 +1,88 @@
+#include <string>
+#include <cctype>
+#include <cfloat>
+#include <cmath>
+#include <vector>
+#include <cstdint>
+#include <cstdio>
+
+class transform_imu
+{
+private:
+    const char *stcTime = nullptr;
+    const char *stcAcc = nullptr;
+    const char *stcGyro = nullptr;
+    const char *stcAngle = nullptr;
+
+public:
+    struct Acc
+    {
+        double x;
+        double y;
+        double z;
+    } acc{0,0,0};
+    struct Gyro
+    {
+        double x;
+        double y;
+        double z;
+    } gyro{0,0,0};
+    struct Angle
+    {
+        double r;
+        double p;
+        double y;
+    } angle{0,0,0};
+
+    void FetchData(std::vector<char> &data, int usLength)
+    {
+        int index = 0;
+        auto read_s16 = [&](int off)->int16_t {
+            uint8_t low = static_cast<uint8_t>(data[off]);
+            uint8_t high = static_cast<uint8_t>(data[off+1]);
+            return static_cast<int16_t>((high << 8) | low);
+        };
+
+        // printf("count %d\n", usLength);
+        while (usLength >= 11)
+        {
+            // printf("%02x\n", static_cast<uint8_t>(data[index + 1]));
+            if (static_cast<uint8_t>(data[index]) != 0x55)
+            {
+                index++;
+                usLength--;
+                continue;
+            }
+
+            if (static_cast<uint8_t>(data[index + 1]) == 0x50) // time
+            {
+                stcTime = &data[index + 2];
+            }
+            else if (static_cast<uint8_t>(data[index + 1]) == 0x51) // 加速度
+            {
+                stcAcc = &data[index + 2];
+                acc.x = read_s16(index + 2) / 32768.0 * 16 * 9.8;
+                acc.y = read_s16(index + 4) / 32768.0 * 16 * 9.8;
+                acc.z = read_s16(index + 6) / 32768.0 * 16 * 9.8;
+            }
+            else if (static_cast<uint8_t>(data[index + 1]) == 0x52) // 陀螺
+            {
+                stcGyro = &data[index + 2];
+                gyro.x = read_s16(index + 2) / 32768.0 * 2000.0 / 180.0 * M_PI;
+                gyro.y = read_s16(index + 4) / 32768.0 * 2000.0 / 180.0 * M_PI;
+                gyro.z = read_s16(index + 6) / 32768.0 * 2000.0 / 180.0 * M_PI;
+            }
+            else if (static_cast<uint8_t>(data[index + 1]) == 0x53) // 角度（Euler）
+            {
+                stcAngle = &data[index + 2];
+                angle.r = read_s16(index + 2) / 32768.0 * M_PI;
+                angle.p = read_s16(index + 4) / 32768.0 * M_PI;
+                angle.y = read_s16(index + 6) / 32768.0 * M_PI;
+            }
+
+            // printf("over\n");
+            usLength -= 11;
+            index += 11;
+        }
+    }
+};

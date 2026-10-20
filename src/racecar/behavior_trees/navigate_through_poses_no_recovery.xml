@@ -1,0 +1,13 @@
+<!--
+  Fixed-course Ackermann NavigateThroughPoses tree.
+  Computes the complete route once and follows it without replanning,
+  recovery spins, or reverse motion.
+-->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="NavigateThroughPosesFixedPath">
+      <ComputePathThroughPoses goals="{goals}" path="{path}" planner_id="GridBased"/>
+      <FollowPath path="{path}" controller_id="FollowPath"/>
+    </Sequence>
+  </BehaviorTree>
+</root>

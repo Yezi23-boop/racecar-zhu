@@ -1,0 +1,13 @@
+<!--
+  Fixed-course Ackermann NavigateToPose tree.
+  Compute one NavFn path, then keep following it without periodic replanning,
+  recovery spins, or reverse motion.
+-->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="NavigateToPoseFixedPath">
+      <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+      <FollowPath path="{path}" controller_id="FollowPath"/>
+    </Sequence>
+  </BehaviorTree>
+</root>
