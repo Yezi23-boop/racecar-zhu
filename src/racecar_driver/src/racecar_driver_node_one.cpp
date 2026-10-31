@@ -25,7 +25,7 @@ public:
     // 起步补偿参数，均可在 launch 文件中覆盖。
     declare_parameter<bool>("enable_startup_boost", true);
     declare_parameter<int>("neutral_motor_pwm", 1500);
-    declare_parameter<int>("neutral_servo_pwm", 1500);
+    declare_parameter<int>("neutral_servo_pwm", 800);
     declare_parameter<int>("startup_boost_pwm", 1565);
     declare_parameter<int>("startup_trigger_max_pwm", 1556);
     declare_parameter<double>("startup_boost_duration", 0.30);
@@ -35,11 +35,11 @@ public:
 
     // 导航 Twist 到下位机 PWM 的换算参数。
     declare_parameter<double>("navigation_speed_scale", 100.0);
-    declare_parameter<double>("navigation_steering_scale", 1300.0);
+    declare_parameter<double>("navigation_steering_scale", 400.0);
     declare_parameter<int>("motor_pwm_min", 1000);
     declare_parameter<int>("motor_pwm_max", 2000);
-    declare_parameter<int>("servo_pwm_min", 500);
-    declare_parameter<int>("servo_pwm_max", 2500);
+    declare_parameter<int>("servo_pwm_min", 600);
+    declare_parameter<int>("servo_pwm_max", 1000);
     declare_parameter<int>("neutral_deadband_pwm", 1);
 
     auto serial_port = get_parameter("serial_port").as_string();
@@ -117,10 +117,12 @@ private:
 
   void teleopCallback(const geometry_msgs::msg::Twist::SharedPtr twist)
   {
-    // 遥控沿用原协议：linear.x 为电机 PWM，angular.z 为舵机角度。
+    // 遥控沿用原协议：linear.x 为电机 PWM，angular.z 为 0~180 度的舵机角度。
+    // 角度按实测行程映射：90 度 = 中位 800µs，20/160 度 = 左右满舵（1000/600µs）。
     const int motor_pwm = static_cast<int>(std::lround(twist->linear.x));
     const int servo_pwm = static_cast<int>(std::lround(
-        2500.0 - twist->angular.z * 2000.0 / 180.0));
+        neutral_servo_pwm_ + (90.0 - twist->angular.z) *
+        (servo_pwm_max_ - servo_pwm_min_) / 2.0 / 70.0));
     updateDesiredCommand(motor_pwm, servo_pwm, "遥控");
   }
 
@@ -237,15 +239,15 @@ private:
   bool timeout_stop_reported_{false};
 
   int neutral_motor_pwm_{1500};
-  int neutral_servo_pwm_{1500};
+  int neutral_servo_pwm_{800};
   int startup_boost_pwm_{1555};
   int startup_trigger_max_pwm_{1546};
   int desired_motor_pwm_{1500};
   int desired_servo_pwm_{1500};
   int motor_pwm_min_{1000};
   int motor_pwm_max_{2000};
-  int servo_pwm_min_{500};
-  int servo_pwm_max_{2500};
+  int servo_pwm_min_{600};
+  int servo_pwm_max_{1000};
   int neutral_deadband_pwm_{1};
 
   double startup_boost_duration_{0.25};
@@ -253,7 +255,7 @@ private:
   double command_timeout_{0.50};
   double output_rate_{50.0};
   double navigation_speed_scale_{100.0};
-  double navigation_steering_scale_{1300.0};
+  double navigation_steering_scale_{400.0};
 
   rclcpp::Time last_command_time_;
   rclcpp::Time neutral_since_;

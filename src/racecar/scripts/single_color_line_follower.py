@@ -303,7 +303,7 @@ class SingleColorLineFollower(Node):
         self.last_steering = steering
         if now - self.last_log_time >= 1.0 / TERMINAL_LOG_RATE:
             state = "MOVE" if speed_pwm > STOP_PWM else "STOP"
-            steering_pwm = 1500.0 + steering * 1300.0
+            steering_pwm = 800.0 + steering * 400.0
             print(
                 f"{state} mode={self.control_state} color={TARGET_COLOR} "
                 f"speed_pwm={speed_pwm:.0f} "

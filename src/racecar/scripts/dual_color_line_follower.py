@@ -763,7 +763,7 @@ class DualColorLineFollower(Node):
 
         if now - self.last_log_time >= 1.0 / TERMINAL_LOG_RATE:
             motion = "MOVE" if speed_pwm > STOP_PWM else "STOP"
-            steering_pwm = 1500.0 + steering * 1300.0
+            steering_pwm = 800.0 + steering * 400.0
             print(
                 f"{motion} mode={self.control_state} "
                 f"path={self.path_state} "

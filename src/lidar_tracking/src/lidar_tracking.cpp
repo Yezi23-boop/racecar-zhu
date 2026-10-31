@@ -313,8 +313,8 @@
   */
  void PubAndSub::handleNormalMode(double angle)
  {
-     // 正常循迹状态控制逻辑：基准舵角82 + PID输出
-     twist.angular.z = 82.5 + angle;                               // 基础转向角度 + PID输出
+     // 正常循迹状态控制逻辑：基准舵角90度（实测中位800µs）+ PID输出
+     twist.angular.z = 90.0 + angle;                               // 基础转向角度 + PID输出
      twist.linear.x = speed;                                     // 使用基础行驶速度
      
      // 大转向角度时减速，提高安全性

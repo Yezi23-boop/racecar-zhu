@@ -328,8 +328,8 @@ velocity_smoother:
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0
     # 基本不限制 DWB 输出，停车命令仍会立即传给底盘。
-    max_velocity: [0.6, 0.0, 1.0]
-    min_velocity: [0.0, 0.0, -1.0]
+    max_velocity: [0.6, 0.0, 0.5]
+    min_velocity: [0.0, 0.0, -0.5]
     max_accel: [20.0, 0.0, 20.0]
     max_decel: [-20.0, 0.0, -20.0]
 

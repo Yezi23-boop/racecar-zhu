@@ -275,7 +275,7 @@ class ColorTracker(Node):
 
         if now - self.last_log_time >= 1.0 / self.args.terminal_log_rate:
             state = "MOVE" if speed > self.args.neutral_pwm else "STOP"
-            steering_pwm = 1500.0 + steering * 1300.0
+            steering_pwm = 800.0 + steering * 400.0
             print(
                 f"{state} speed_pwm={speed:.0f} linear.x={linear_command:.3f} "
                 f"angular.z={steering:+.3f} steering_pwm={steering_pwm:.0f}",

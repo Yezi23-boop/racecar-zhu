@@ -369,8 +369,8 @@ velocity_smoother:
     scale_velocities: False
     feedback: "OPEN_LOOP"
 
-    max_velocity: [0.60, 0.0, 2.5]
-    min_velocity: [-0.60, 0.0, -2.5]
+    max_velocity: [0.60, 0.0, 0.5]
+    min_velocity: [-0.60, 0.0, -0.5]
 
     max_accel: [2.5, 0.0, 3.2]
     max_decel: [-2.5, 0.0, -3.2]
