@@ -46,7 +46,7 @@ public:
     // 转向过冲：每一次舵机目标变化，先朝变化方向多打一段，再落到目标，抵消机构松动。
     declare_parameter<bool>("steer_overshoot_enable", true);
     declare_parameter<int>("steer_overshoot_pwm", 100);
-    declare_parameter<double>("steer_overshoot_sec", 0.20);
+    declare_parameter<double>("steer_overshoot_sec", 0.40);
 
     const auto serial_port = get_parameter("serial_port").as_string();
     const auto baud_rate = get_parameter("baud_rate").as_int();
@@ -231,35 +231,36 @@ private:
     output_motor_pwm = std::clamp(output_motor_pwm, motor_pwm_min_, motor_pwm_max_);
 
     int output_servo_pwm = desired_servo_pwm_;
+    bool overshoot_output = false;
     if (steer_overshoot_enable_ && steer_overshoot_pwm_ > 0 && steer_overshoot_sec_ > 0.0) {
       const auto current_time = now();
       if (desired_servo_pwm_ != last_target_servo_pwm_) {
-        // 目标变了：先朝变化方向多打一段，保持后再落到新目标。
+        // 目标变了：先朝变化方向多打一段（允许越过舵机极限），保持后再落到新目标。
         const int direction = desired_servo_pwm_ > last_target_servo_pwm_ ? 1 : -1;
         const int overshoot_pwm = desired_servo_pwm_ + direction * steer_overshoot_pwm_;
         last_target_servo_pwm_ = desired_servo_pwm_;
-        steer_overshoot_active_ = false;
-        if (overshoot_pwm >= servo_pwm_min_ && overshoot_pwm <= servo_pwm_max_) {
-          steer_overshoot_output_pwm_ = overshoot_pwm;
-          steer_overshoot_active_ = true;
-          steer_overshoot_until_ =
-            current_time + rclcpp::Duration::from_seconds(steer_overshoot_sec_);
-          RCLCPP_INFO(
-            get_logger(), "转向过冲：%d -> %d µs，保持 %.2f 秒后到目标 %d",
-            last_output_servo_pwm_, steer_overshoot_output_pwm_,
-            steer_overshoot_sec_, desired_servo_pwm_);
-        }
+        steer_overshoot_output_pwm_ = overshoot_pwm;
+        steer_overshoot_active_ = true;
+        steer_overshoot_until_ =
+          current_time + rclcpp::Duration::from_seconds(steer_overshoot_sec_);
+        RCLCPP_INFO(
+          get_logger(), "转向过冲：%d -> %d µs，保持 %.2f 秒后到目标 %d",
+          last_output_servo_pwm_, steer_overshoot_output_pwm_,
+          steer_overshoot_sec_, desired_servo_pwm_);
       }
       if (steer_overshoot_active_) {
         if (current_time < steer_overshoot_until_) {
           output_servo_pwm = steer_overshoot_output_pwm_;
+          overshoot_output = true;
         } else {
           steer_overshoot_active_ = false;
           RCLCPP_INFO(get_logger(), "转向过冲结束，到达目标 %d", desired_servo_pwm_);
         }
       }
     }
-    output_servo_pwm = std::clamp(output_servo_pwm, servo_pwm_min_, servo_pwm_max_);
+    if (!overshoot_output) {
+      output_servo_pwm = std::clamp(output_servo_pwm, servo_pwm_min_, servo_pwm_max_);
+    }
 
     send_cmd(
       static_cast<uint16_t>(output_motor_pwm),
@@ -298,7 +299,7 @@ private:
 
   bool steer_overshoot_enable_{true};
   int steer_overshoot_pwm_{100};
-  double steer_overshoot_sec_{0.20};
+  double steer_overshoot_sec_{0.40};
   bool steer_overshoot_active_{false};
   int steer_overshoot_output_pwm_{0};
   int last_target_servo_pwm_{0};
