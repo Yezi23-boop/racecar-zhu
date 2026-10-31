@@ -43,6 +43,11 @@ public:
     declare_parameter<int>("servo_pwm_max", 1000);
     declare_parameter<int>("neutral_deadband_pwm", 1);
 
+    // 回中过冲：从任一侧回中时先反向越过中位一段，再回中位，抵消转向机构松动。
+    declare_parameter<bool>("center_overshoot_enable", true);
+    declare_parameter<int>("center_overshoot_pwm", 100);
+    declare_parameter<double>("center_overshoot_sec", 0.20);
+
     const auto serial_port = get_parameter("serial_port").as_string();
     const auto baud_rate = get_parameter("baud_rate").as_int();
     enable_startup_boost_ = get_parameter("enable_startup_boost").as_bool();
@@ -61,12 +66,17 @@ public:
     servo_pwm_min_ = get_parameter("servo_pwm_min").as_int();
     servo_pwm_max_ = get_parameter("servo_pwm_max").as_int();
     neutral_deadband_pwm_ = get_parameter("neutral_deadband_pwm").as_int();
+    center_overshoot_enable_ = get_parameter("center_overshoot_enable").as_bool();
+    center_overshoot_pwm_ = get_parameter("center_overshoot_pwm").as_int();
+    center_overshoot_sec_ = get_parameter("center_overshoot_sec").as_double();
 
     startup_boost_duration_ = std::max(0.0, startup_boost_duration_);
     startup_rearm_duration_ = std::max(0.0, startup_rearm_duration_);
     command_timeout_ = std::max(0.1, command_timeout_);
     output_rate_ = std::max(1.0, output_rate_);
     neutral_deadband_pwm_ = std::max(0, neutral_deadband_pwm_);
+    center_overshoot_pwm_ = std::max(0, center_overshoot_pwm_);
+    center_overshoot_sec_ = std::max(0.0, center_overshoot_sec_);
     startup_boost_pwm_ = std::max(startup_boost_pwm_, neutral_motor_pwm_);
     startup_trigger_max_pwm_ = std::max(startup_trigger_max_pwm_, neutral_motor_pwm_);
 
@@ -76,6 +86,8 @@ public:
 
     desired_motor_pwm_ = neutral_motor_pwm_;
     desired_servo_pwm_ = neutral_servo_pwm_;
+    last_output_servo_pwm_ = neutral_servo_pwm_;
+    center_overshoot_until_ = now();
     last_command_time_ = now();
     neutral_since_ = now();
     boost_until_ = now();
@@ -134,6 +146,9 @@ private:
     const auto current_time = now();
     desired_motor_pwm_ = std::clamp(motor_pwm, motor_pwm_min_, motor_pwm_max_);
     desired_servo_pwm_ = std::clamp(servo_pwm, servo_pwm_min_, servo_pwm_max_);
+    if (!isServoNeutral(desired_servo_pwm_)) {
+      center_overshoot_active_ = false;
+    }
     last_command_time_ = current_time;
     timeout_stop_reported_ = false;
 
@@ -209,6 +224,11 @@ private:
     sendCurrentCommand();
   }
 
+  bool isServoNeutral(int servo_pwm) const
+  {
+    return std::abs(servo_pwm - neutral_servo_pwm_) <= 1;
+  }
+
   void sendCurrentCommand()
   {
     int output_motor_pwm = desired_motor_pwm_;
@@ -217,18 +237,46 @@ private:
     }
 
     output_motor_pwm = std::clamp(output_motor_pwm, motor_pwm_min_, motor_pwm_max_);
-    const int output_servo_pwm =
-      std::clamp(desired_servo_pwm_, servo_pwm_min_, servo_pwm_max_);
+
+    int output_servo_pwm = desired_servo_pwm_;
+    if (center_overshoot_enable_ && center_overshoot_pwm_ > 0 && center_overshoot_sec_ > 0.0) {
+      const auto current_time = now();
+      if (!center_overshoot_active_ && isServoNeutral(desired_servo_pwm_) &&
+        !isServoNeutral(last_output_servo_pwm_))
+      {
+        const int offset = last_output_servo_pwm_ - neutral_servo_pwm_;
+        center_overshoot_servo_pwm_ = neutral_servo_pwm_ -
+          (offset > 0 ? center_overshoot_pwm_ : -center_overshoot_pwm_);
+        center_overshoot_active_ = true;
+        center_overshoot_until_ =
+          current_time + rclcpp::Duration::from_seconds(center_overshoot_sec_);
+        RCLCPP_INFO(
+          get_logger(), "回中过冲：%d -> %d µs，保持 %.2f 秒后回中位 %d",
+          last_output_servo_pwm_, center_overshoot_servo_pwm_,
+          center_overshoot_sec_, neutral_servo_pwm_);
+      }
+      if (center_overshoot_active_) {
+        if (current_time < center_overshoot_until_) {
+          output_servo_pwm = center_overshoot_servo_pwm_;
+        } else {
+          center_overshoot_active_ = false;
+          RCLCPP_INFO(get_logger(), "回中过冲结束，回到中位 %d", neutral_servo_pwm_);
+        }
+      }
+    }
+    output_servo_pwm = std::clamp(output_servo_pwm, servo_pwm_min_, servo_pwm_max_);
 
     send_cmd(
       static_cast<uint16_t>(output_motor_pwm),
       static_cast<uint16_t>(output_servo_pwm));
+    last_output_servo_pwm_ = output_servo_pwm;
 
+    const char * note = center_overshoot_active_
+      ? "（回中过冲）" : (boost_active_ ? "（起步补偿中）" : "");
     RCLCPP_INFO_THROTTLE(
       get_logger(), *get_clock(), 1000,
       "底盘输出：电机PWM=%d，舵机PWM=%d，目标电机PWM=%d%s",
-      output_motor_pwm, output_servo_pwm, desired_motor_pwm_,
-      boost_active_ ? "（起步补偿中）" : "");
+      output_motor_pwm, output_servo_pwm, desired_motor_pwm_, note);
   }
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr navigation_subscription_;
@@ -253,6 +301,13 @@ private:
   int servo_pwm_max_{1000};
   int neutral_deadband_pwm_{1};
 
+  bool center_overshoot_enable_{true};
+  int center_overshoot_pwm_{100};
+  double center_overshoot_sec_{0.20};
+  bool center_overshoot_active_{false};
+  int center_overshoot_servo_pwm_{0};
+  int last_output_servo_pwm_{0};
+
   double startup_boost_duration_{0.25};
   double startup_rearm_duration_{0.30};
   double command_timeout_{0.50};
@@ -263,6 +318,7 @@ private:
   rclcpp::Time last_command_time_;
   rclcpp::Time neutral_since_;
   rclcpp::Time boost_until_;
+  rclcpp::Time center_overshoot_until_;
 };
 
 int main(int argc, char ** argv)
